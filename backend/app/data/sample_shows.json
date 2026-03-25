@@ -1,0 +1,35 @@
+[
+  {
+    "artist": "Moon Circuit",
+    "date": "2026-03-29",
+    "venue": "Hi-Dive",
+    "venue_url": "https://example.com/venues/hi-dive",
+    "ticket_url": "https://example.com/tickets/moon-circuit",
+    "latitude": 39.732,
+    "longitude": -104.981,
+    "scene": "indie-electronic",
+    "vibe_tags": ["indie electronic", "dream pop", "synth", "moody", "late-night"]
+  },
+  {
+    "artist": "Rust Bloom",
+    "date": "2026-04-02",
+    "venue": "Lost Lake",
+    "venue_url": "https://example.com/venues/lost-lake",
+    "ticket_url": "https://example.com/tickets/rust-bloom",
+    "latitude": 39.758,
+    "longitude": -104.978,
+    "scene": "alt-country",
+    "vibe_tags": ["alt-country", "americana", "gritty", "live band", "storytelling"]
+  },
+  {
+    "artist": "Glass Alley Trio",
+    "date": "2026-04-05",
+    "venue": "Larimer Lounge",
+    "venue_url": "https://example.com/venues/larimer-lounge",
+    "ticket_url": "https://example.com/tickets/glass-alley",
+    "latitude": 39.769,
+    "longitude": -104.979,
+    "scene": "post-punk",
+    "vibe_tags": ["post-punk", "art rock", "dark", "angular", "indie"]
+  }
+]
