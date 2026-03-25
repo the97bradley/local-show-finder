@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
 
 export default function Home() {
   const [city, setCity] = useState("Denver");
+  const [address, setAddress] = useState("Denver, CO");
   const [latitude, setLatitude] = useState("39.7392");
   const [longitude, setLongitude] = useState("-104.9903");
   const [radius, setRadius] = useState("20");
@@ -16,6 +17,11 @@ export default function Home() {
   );
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const mapRef = useRef(null);
+  const markerRef = useRef(null);
+  const circleRef = useRef(null);
+  const mapNodeRef = useRef(null);
 
   const parsedArtists = useMemo(() => {
     return artistsText
@@ -34,6 +40,91 @@ export default function Home() {
       })
       .filter((a) => a.name);
   }, [artistsText]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (mapRef.current || !mapNodeRef.current) return;
+
+    (async () => {
+      const L = (await import("leaflet")).default;
+      if (!mounted || mapRef.current || !mapNodeRef.current) return;
+
+      const lat = Number(latitude);
+      const lon = Number(longitude);
+      const radMeters = Number(radius) * 1609.34;
+
+      const map = L.map(mapNodeRef.current).setView([lat, lon], 11);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap contributors",
+      }).addTo(map);
+
+      const marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+      const circle = L.circle([lat, lon], {
+        radius: radMeters,
+        color: "#6d7cff",
+        fillColor: "#6d7cff",
+        fillOpacity: 0.18,
+        weight: 2,
+      }).addTo(map);
+
+      marker.on("dragend", () => {
+        const ll = marker.getLatLng();
+        setLatitude(ll.lat.toFixed(6));
+        setLongitude(ll.lng.toFixed(6));
+        circle.setLatLng(ll);
+      });
+
+      map.on("click", (e) => {
+        marker.setLatLng(e.latlng);
+        circle.setLatLng(e.latlng);
+        setLatitude(e.latlng.lat.toFixed(6));
+        setLongitude(e.latlng.lng.toFixed(6));
+      });
+
+      map.on("contextmenu", (e) => {
+        const center = marker.getLatLng();
+        const meters = center.distanceTo(e.latlng);
+        const miles = Math.max(1, meters / 1609.34);
+        setRadius(miles.toFixed(1));
+        circle.setRadius(miles * 1609.34);
+      });
+
+      mapRef.current = map;
+      markerRef.current = marker;
+      circleRef.current = circle;
+    })();
+
+    return () => {
+      mounted = false;
+      if (mapRef.current) mapRef.current.remove();
+      mapRef.current = null;
+      markerRef.current = null;
+      circleRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!markerRef.current || !circleRef.current || !mapRef.current) return;
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+    const ll = { lat, lng: lon };
+    markerRef.current.setLatLng(ll);
+    circleRef.current.setLatLng(ll);
+    circleRef.current.setRadius(Number(radius) * 1609.34);
+    mapRef.current.panTo(ll);
+  }, [latitude, longitude, radius]);
+
+  async function geocodeAddress() {
+    const q = address.trim();
+    if (!q) return;
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
+    );
+    const data = await r.json();
+    if (!data?.length) return;
+    setLatitude(Number(data[0].lat).toFixed(6));
+    setLongitude(Number(data[0].lon).toFixed(6));
+  }
 
   async function runSearch() {
     setLoading(true);
@@ -62,8 +153,8 @@ export default function Home() {
       <header className="header">
         <h1 className="title">Local Show Finder</h1>
         <p className="subtitle">
-          Find upcoming local shows that match your taste by <strong>vibe</strong>,
-          not just popularity.
+          Enter an address, set your radius on the map, then find vibe-matched
+          local shows.
         </p>
       </header>
 
@@ -74,18 +165,21 @@ export default function Home() {
             <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
           </label>
           <label className="label">
-            Radius (miles)
-            <input className="input" value={radius} onChange={(e) => setRadius(e.target.value)} />
-          </label>
-          <label className="label">
-            Latitude
-            <input className="input" value={latitude} onChange={(e) => setLatitude(e.target.value)} />
-          </label>
-          <label className="label">
-            Longitude
-            <input className="input" value={longitude} onChange={(e) => setLongitude(e.target.value)} />
+            Address
+            <div className="row">
+              <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
+              <button className="btn" type="button" onClick={geocodeAddress}>Locate</button>
+            </div>
           </label>
         </div>
+
+        <div className="mapWrap" style={{ marginTop: 12 }}>
+          <div ref={mapNodeRef} className="map" />
+        </div>
+        <p className="meta" style={{ marginTop: 8 }}>
+          Tip: drag marker to move center. Right-click map edge to resize circle.
+          Current radius: {radius} mi.
+        </p>
 
         <div style={{ marginTop: 10 }}>
           <label className="label">
@@ -115,7 +209,6 @@ export default function Home() {
           <button className="btn" onClick={runSearch} disabled={loading}>
             {loading ? "Finding vibe matches..." : "Find Shows"}
           </button>
-          <span className="meta">API: {API_BASE}</span>
         </div>
       </section>
 
@@ -136,13 +229,7 @@ export default function Home() {
             Why: {r.reasons.join(" • ")}
           </p>
           <p className="links">
-            <a href={r.ticket_url} target="_blank">
-              Tickets
-            </a>{" "}
-            •{" "}
-            <a href={r.venue_url} target="_blank">
-              Venue
-            </a>
+            <a href={r.ticket_url} target="_blank">Tickets</a> • <a href={r.venue_url} target="_blank">Venue</a>
           </p>
         </article>
       ))}
