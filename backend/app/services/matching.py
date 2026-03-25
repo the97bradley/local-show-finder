@@ -2,9 +2,12 @@ import json
 import math
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote_plus
+from urllib.request import urlopen
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "sample_shows.json"
 PROFILES_PATH = Path(__file__).resolve().parents[1] / "data" / "artist_profiles.json"
+ITUNES_CACHE: Dict[str, List[str]] = {}
 
 
 def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -30,10 +33,68 @@ def _load_profiles() -> Dict[str, List[str]]:
         return json.load(f)
 
 
+def _genre_to_tags(genre: str) -> List[str]:
+    g = genre.lower().strip()
+    if not g:
+        return []
+
+    seed = {
+        "pop": ["pop", "melodic", "hooky", "mainstream"],
+        "alternative": ["alternative", "indie", "guitar", "moody"],
+        "indie": ["indie", "alt", "melodic", "scene"],
+        "rock": ["rock", "live band", "guitar", "energetic"],
+        "electronic": ["electronic", "synth", "dance", "late-night"],
+        "dance": ["dance", "electronic", "club", "late-night"],
+        "house": ["house", "club", "electronic", "groove"],
+        "hip-hop": ["hip-hop", "rhythmic", "bass-heavy", "urban"],
+        "rap": ["rap", "hip-hop", "rhythmic", "urban"],
+        "country": ["country", "americana", "storytelling", "roots"],
+        "folk": ["folk", "acoustic", "storytelling", "intimate"],
+        "jazz": ["jazz", "improv", "instrumental", "live"],
+        "r&b": ["r&b", "soulful", "groove", "melodic"],
+        "soul": ["soul", "warm", "groove", "vocals"],
+        "metal": ["metal", "heavy", "aggressive", "loud"],
+        "punk": ["punk", "raw", "fast", "diy"],
+    }
+
+    for key, tags in seed.items():
+        if key in g:
+            return tags
+
+    return [g, "live", "band", "scene"]
+
+
+def _fetch_itunes_tags(name: str) -> List[str]:
+    key = name.lower().strip()
+    if key in ITUNES_CACHE:
+        return ITUNES_CACHE[key]
+
+    try:
+        url = f"https://itunes.apple.com/search?term={quote_plus(name)}&entity=musicArtist&limit=1"
+        with urlopen(url, timeout=3) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+        results = payload.get("results", [])
+        if results:
+            genre = str(results[0].get("primaryGenreName", "")).strip()
+            tags = _genre_to_tags(genre)
+            ITUNES_CACHE[key] = tags
+            return tags
+    except Exception:
+        pass
+
+    ITUNES_CACHE[key] = []
+    return []
+
+
 def _seed_tags_for_artist(name: str, explicit_tags: List[str], profiles: Dict[str, List[str]]) -> set[str]:
     if explicit_tags:
         return set(t.lower() for t in explicit_tags)
-    return set(t.lower() for t in profiles.get(name.lower(), []))
+
+    profile_tags = profiles.get(name.lower(), [])
+    if profile_tags:
+        return set(t.lower() for t in profile_tags)
+
+    return set(t.lower() for t in _fetch_itunes_tags(name))
 
 
 def find_matches(
