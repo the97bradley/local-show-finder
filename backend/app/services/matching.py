@@ -1,5 +1,7 @@
 import json
 import math
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -12,6 +14,9 @@ from app.services.venues import discover_venues
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "sample_shows.json"
 PROFILES_PATH = Path(__file__).resolve().parents[1] / "data" / "artist_profiles.json"
 ITUNES_CACHE: Dict[str, List[str]] = {}
+LIVE_SHOWS_CACHE: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
+LIVE_SHOWS_TTL_S = 1800
+MAX_VENUES_TO_SCRAPE = 25
 
 
 def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -107,26 +112,45 @@ def _load_live_shows(
     radius_miles: float,
     horizon_days: int = 90,
 ) -> List[Dict[str, Any]]:
+    cache_key = f"{round(latitude,3)}:{round(longitude,3)}:{round(radius_miles,1)}:{int(horizon_days)}"
+    now_ts = time.time()
+    cached = LIVE_SHOWS_CACHE.get(cache_key)
+    if cached and (now_ts - cached[0]) < LIVE_SHOWS_TTL_S:
+        return cached[1]
+
     venues = discover_venues(latitude, longitude, radius_miles)
+    venues = [v for v in venues if v.website]
+    venues.sort(key=lambda v: _haversine_miles(latitude, longitude, v.latitude, v.longitude))
+    venues = venues[:MAX_VENUES_TO_SCRAPE]
 
     rows: List[Dict[str, Any]] = []
-    for venue in venues:
-        events = scrape_venue_events(venue, horizon_days=horizon_days)
-        for e in events:
-            rows.append(
-                {
-                    "artist": e.artist,
-                    "date": e.date,
-                    "venue": e.venue,
-                    "venue_url": e.venue_url,
-                    "ticket_url": e.ticket_url,
-                    "latitude": e.latitude,
-                    "longitude": e.longitude,
-                    "vibe_tags": e.vibe_tags,
-                    "scene": e.scene,
-                }
-            )
 
+    def scrape_one(v):
+        return scrape_venue_events(v, horizon_days=horizon_days)
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(scrape_one, v): v for v in venues}
+        for fut in as_completed(futures):
+            try:
+                events = fut.result()
+            except Exception:
+                events = []
+            for e in events:
+                rows.append(
+                    {
+                        "artist": e.artist,
+                        "date": e.date,
+                        "venue": e.venue,
+                        "venue_url": e.venue_url,
+                        "ticket_url": e.ticket_url,
+                        "latitude": e.latitude,
+                        "longitude": e.longitude,
+                        "vibe_tags": e.vibe_tags,
+                        "scene": e.scene,
+                    }
+                )
+
+    LIVE_SHOWS_CACHE[cache_key] = (now_ts, rows)
     return rows
 
 
