@@ -228,7 +228,11 @@ def find_matches(
         if exact_seed_name:
             score = 1.0
 
-        if best_overlap == 0 and has_any_seed_tags:
+        # Precision guardrails to avoid obviously wrong matches.
+        min_overlap = 2 if has_any_seed_tags else 1
+        if anchor_artist:
+            min_overlap = 3
+        if not exact_seed_name and best_overlap < min_overlap:
             continue
 
         reasons = [

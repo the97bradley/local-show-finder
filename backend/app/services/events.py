@@ -34,6 +34,24 @@ def _clean_text(html: str) -> str:
     return text
 
 
+def _extract_artist(snippet: str, venue_name: str) -> str:
+    s = snippet
+    s = re.sub(r"\b(?:tickets?|tables?|vip|doors?|show|buy|eventbrite|rsvp)\b", " ", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b(?:mon|tue|wed|thu|fri|sat|sun)(?:day)?\b", " ", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", " ", s, flags=re.IGNORECASE)
+    s = re.sub(r"\b\d{1,2}(?::\d{2})?\b", " ", s)
+    s = re.sub(r"\s+", " ", s).strip(" -|:")
+
+    if not s:
+        return f"Show at {venue_name}"
+
+    # Keep first chunk before obvious separators.
+    s = re.split(r"\s+(?:with|at|@|ft\.?|featuring)\s+|\||/", s, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    if len(s) > 80:
+        s = s[:80].strip()
+    return s or f"Show at {venue_name}"
+
+
 def _guess_vibe_tags(snippet: str) -> list[str]:
     s = snippet.lower()
     tags = []
@@ -90,7 +108,7 @@ def scrape_venue_events(venue: Venue, horizon_days: int = 90) -> List[LocalEvent
         finish = min(len(text), m.end() + 80)
         snippet = text[start:finish].strip()
 
-        artist = snippet[:70].strip(" -|:") or f"Show at {venue.name}"
+        artist = _extract_artist(snippet, venue.name)
         events.append(
             LocalEvent(
                 artist=artist,
