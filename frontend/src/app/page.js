@@ -5,6 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
 
+function addDaysIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Home() {
   const [city] = useState("Local");
   const [address, setAddress] = useState("Denver, CO");
@@ -12,6 +18,8 @@ export default function Home() {
   const [latitude, setLatitude] = useState("39.7392");
   const [longitude, setLongitude] = useState("-104.9903");
   const [radius, setRadius] = useState("8");
+  const [startDate, setStartDate] = useState(addDaysIso(0));
+  const [endDate, setEndDate] = useState(addDaysIso(90));
   const [anchorArtist, setAnchorArtist] = useState("");
   const [artistsText, setArtistsText] = useState(
     "Tame Impala\nMJ Lenderman\nKhruangbin",
@@ -151,6 +159,8 @@ export default function Home() {
           latitude: Number(latitude),
           longitude: Number(longitude),
           radius_miles: Number(radius),
+          start_date: startDate,
+          end_date: endDate,
           favorite_artists: parsedArtists,
           anchor_artist: anchorArtist || null,
         }),
@@ -219,6 +229,27 @@ export default function Home() {
         <p className="meta" style={{ marginTop: 6 }}>
           Drag the map to reposition the center pin.
         </p>
+
+        <div className="grid" style={{ marginTop: 10 }}>
+          <label className="label">
+            Start date
+            <input
+              className="input"
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </label>
+          <label className="label">
+            End date
+            <input
+              className="input"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </label>
+        </div>
 
         <div style={{ marginTop: 10 }}>
           <label className="label">

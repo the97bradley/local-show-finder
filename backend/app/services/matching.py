@@ -1,5 +1,6 @@
 import json
 import math
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
@@ -100,12 +101,17 @@ def _seed_tags_for_artist(name: str, explicit_tags: List[str], profiles: Dict[st
     return set(t.lower() for t in _fetch_itunes_tags(name))
 
 
-def _load_live_shows(latitude: float, longitude: float, radius_miles: float) -> List[Dict[str, Any]]:
+def _load_live_shows(
+    latitude: float,
+    longitude: float,
+    radius_miles: float,
+    horizon_days: int = 90,
+) -> List[Dict[str, Any]]:
     venues = discover_venues(latitude, longitude, radius_miles)
 
     rows: List[Dict[str, Any]] = []
     for venue in venues:
-        events = scrape_venue_events(venue, horizon_days=90)
+        events = scrape_venue_events(venue, horizon_days=horizon_days)
         for e in events:
             rows.append(
                 {
@@ -130,8 +136,20 @@ def find_matches(
     radius_miles: float,
     favorite_artists: List[Dict[str, Any]],
     anchor_artist: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    shows = _load_live_shows(latitude, longitude, radius_miles)
+    from datetime import timedelta
+
+    today = date.today()
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else today
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else (start_dt + timedelta(days=90))
+    if end_dt < start_dt:
+        start_dt, end_dt = end_dt, start_dt
+
+    horizon_days = max(1, (end_dt - today).days)
+
+    shows = _load_live_shows(latitude, longitude, radius_miles, horizon_days=horizon_days)
     if not shows:
         shows = _load_shows()  # fallback for local dev when scraping yields nothing
 
@@ -154,6 +172,13 @@ def find_matches(
 
     out = []
     for s in shows:
+        try:
+            show_dt = datetime.strptime(str(s.get("date", "")), "%Y-%m-%d").date()
+        except Exception:
+            continue
+        if show_dt < start_dt or show_dt > end_dt:
+            continue
+
         dist = _haversine_miles(latitude, longitude, s["latitude"], s["longitude"])
         if dist > radius_miles:
             continue

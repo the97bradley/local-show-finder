@@ -18,6 +18,8 @@ class FeedRequest(BaseModel):
     latitude: float
     longitude: float
     radius_miles: float = 25
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
     favorite_artists: List[ArtistSeed] = Field(default_factory=list)
     anchor_artist: Optional[str] = None
 
@@ -45,6 +47,8 @@ def recommend_shows(payload: FeedRequest) -> FeedResponse:
         latitude=payload.latitude,
         longitude=payload.longitude,
         radius_miles=payload.radius_miles,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
         favorite_artists=[a.model_dump() for a in payload.favorite_artists],
         anchor_artist=payload.anchor_artist,
     )

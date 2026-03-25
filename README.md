@@ -11,7 +11,7 @@ Vibe-first local show discovery app.
   - Scrapes venue calendars within a 90-day horizon
   - Matches scraped local shows to your seed artists using vibe-tag overlap + distance
 - **JS frontend (Next.js)** (`frontend/`)
-  - Enter city + coordinates + radius
+  - Enter address + radius + date window
   - Paste seed artists (tags optional)
   - Optional anchor artist mode
   - See matched shows with “similar to” explanations
