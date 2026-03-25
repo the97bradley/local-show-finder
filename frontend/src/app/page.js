@@ -8,6 +8,7 @@ const API_BASE =
 export default function Home() {
   const [city, setCity] = useState("Denver");
   const [address, setAddress] = useState("Denver, CO");
+  const [addressOptions, setAddressOptions] = useState([]);
   const [latitude, setLatitude] = useState("39.7392");
   const [longitude, setLongitude] = useState("-104.9903");
   const [radius, setRadius] = useState("20");
@@ -43,6 +44,34 @@ export default function Home() {
 
   useEffect(() => {
     let mounted = true;
+    if (address.trim().length < 3) {
+      setAddressOptions([]);
+      return;
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            address,
+          )}&limit=6`,
+        );
+        const data = await r.json();
+        if (!mounted) return;
+        setAddressOptions(data || []);
+      } catch {
+        if (mounted) setAddressOptions([]);
+      }
+    }, 300);
+
+    return () => {
+      mounted = false;
+      clearTimeout(t);
+    };
+  }, [address]);
+
+  useEffect(() => {
+    let mounted = true;
     if (mapRef.current || !mapNodeRef.current) return;
 
     (async () => {
@@ -58,7 +87,7 @@ export default function Home() {
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      const marker = L.marker([lat, lon], { draggable: true }).addTo(map);
+      const marker = L.marker([lat, lon], { draggable: false }).addTo(map);
       const circle = L.circle([lat, lon], {
         radius: radMeters,
         color: "#6d7cff",
@@ -67,26 +96,12 @@ export default function Home() {
         weight: 2,
       }).addTo(map);
 
-      marker.on("dragend", () => {
-        const ll = marker.getLatLng();
-        setLatitude(ll.lat.toFixed(6));
-        setLongitude(ll.lng.toFixed(6));
-        circle.setLatLng(ll);
-      });
-
-      map.on("click", (e) => {
-        marker.setLatLng(e.latlng);
-        circle.setLatLng(e.latlng);
-        setLatitude(e.latlng.lat.toFixed(6));
-        setLongitude(e.latlng.lng.toFixed(6));
-      });
-
-      map.on("contextmenu", (e) => {
-        const center = marker.getLatLng();
-        const meters = center.distanceTo(e.latlng);
-        const miles = Math.max(1, meters / 1609.34);
-        setRadius(miles.toFixed(1));
-        circle.setRadius(miles * 1609.34);
+      map.on("dragend", () => {
+        const center = map.getCenter();
+        marker.setLatLng(center);
+        circle.setLatLng(center);
+        setLatitude(center.lat.toFixed(6));
+        setLongitude(center.lng.toFixed(6));
       });
 
       mapRef.current = map;
@@ -111,19 +126,16 @@ export default function Home() {
     markerRef.current.setLatLng(ll);
     circleRef.current.setLatLng(ll);
     circleRef.current.setRadius(Number(radius) * 1609.34);
-    mapRef.current.panTo(ll);
   }, [latitude, longitude, radius]);
 
-  async function geocodeAddress() {
-    const q = address.trim();
-    if (!q) return;
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
-    );
-    const data = await r.json();
-    if (!data?.length) return;
-    setLatitude(Number(data[0].lat).toFixed(6));
-    setLongitude(Number(data[0].lon).toFixed(6));
+  function applyAddressOption(option) {
+    setAddress(option.display_name || address);
+    setAddressOptions([]);
+    setLatitude(Number(option.lat).toFixed(6));
+    setLongitude(Number(option.lon).toFixed(6));
+    if (mapRef.current) {
+      mapRef.current.setView([Number(option.lat), Number(option.lon)], 12);
+    }
   }
 
   async function runSearch() {
@@ -153,8 +165,8 @@ export default function Home() {
       <header className="header">
         <h1 className="title">Local Show Finder</h1>
         <p className="subtitle">
-          Enter an address, set your radius on the map, then find vibe-matched
-          local shows.
+          Facebook Marketplace style location: autocomplete + drag map + radius
+          slider.
         </p>
       </header>
 
@@ -162,23 +174,56 @@ export default function Home() {
         <div className="grid">
           <label className="label">
             City
-            <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
+            <input
+              className="input"
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+            />
           </label>
-          <label className="label">
+          <label className="label" style={{ position: "relative" }}>
             Address
-            <div className="row">
-              <input className="input" value={address} onChange={(e) => setAddress(e.target.value)} />
-              <button className="btn" type="button" onClick={geocodeAddress}>Locate</button>
-            </div>
+            <input
+              className="input"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Start typing an address..."
+            />
+            {addressOptions.length > 0 && (
+              <div className="suggestions">
+                {addressOptions.map((o) => (
+                  <button
+                    key={`${o.place_id}`}
+                    className="suggestion"
+                    type="button"
+                    onClick={() => applyAddressOption(o)}
+                  >
+                    {o.display_name}
+                  </button>
+                ))}
+              </div>
+            )}
           </label>
         </div>
 
         <div className="mapWrap" style={{ marginTop: 12 }}>
           <div ref={mapNodeRef} className="map" />
         </div>
-        <p className="meta" style={{ marginTop: 8 }}>
-          Tip: drag marker to move center. Right-click map edge to resize circle.
-          Current radius: {radius} mi.
+
+        <div style={{ marginTop: 10 }}>
+          <label className="label">
+            Radius: <strong>{radius} miles</strong>
+            <input
+              type="range"
+              min="1"
+              max="100"
+              value={radius}
+              onChange={(e) => setRadius(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <p className="meta" style={{ marginTop: 6 }}>
+          Drag the map to reposition the center pin.
         </p>
 
         <div style={{ marginTop: 10 }}>
@@ -195,7 +240,8 @@ export default function Home() {
 
         <div style={{ marginTop: 10 }}>
           <label className="label">
-            Favorite artists (one per line, tags optional: <code>Artist</code> or <code>Artist|tag1,tag2</code>)
+            Favorite artists (one per line, tags optional: <code>Artist</code> or{" "}
+            <code>Artist|tag1,tag2</code>)
             <textarea
               className="textarea"
               rows={8}
@@ -229,7 +275,13 @@ export default function Home() {
             Why: {r.reasons.join(" • ")}
           </p>
           <p className="links">
-            <a href={r.ticket_url} target="_blank">Tickets</a> • <a href={r.venue_url} target="_blank">Venue</a>
+            <a href={r.ticket_url} target="_blank">
+              Tickets
+            </a>{" "}
+            •{" "}
+            <a href={r.venue_url} target="_blank">
+              Venue
+            </a>
           </p>
         </article>
       ))}

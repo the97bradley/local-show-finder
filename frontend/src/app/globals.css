@@ -34,6 +34,10 @@ body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Ro
 .map { width: 100%; height: 330px; }
 .leaflet-container { background: #0b1328; }
 
+.suggestions { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; max-height: 220px; overflow: auto; z-index: 30; background: #0b1328; border: 1px solid var(--border); border-radius: 10px; }
+.suggestion { width: 100%; text-align: left; border: none; background: transparent; color: var(--text); padding: 9px 10px; cursor: pointer; }
+.suggestion:hover { background: rgba(109,124,255,.2); }
+
 .section-title { margin: 22px 0 12px; font-size: 21px; }
 .card { background: rgba(8, 13, 29, 0.75); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
 .card h3 { margin: 0 0 8px; font-size: 18px; }
