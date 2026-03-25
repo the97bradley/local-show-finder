@@ -91,8 +91,12 @@ export default function Home() {
       const radMeters = Number(radius) * 1609.34;
 
       const map = L.map(mapNodeRef.current).setView([lat, lon], 11);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors",
+      // Carto Voyager: cleaner, more Google-like visual style than default OSM.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+        attribution:
+          '&copy; OpenStreetMap contributors &copy; CARTO',
+        subdomains: "abcd",
+        maxZoom: 20,
       }).addTo(map);
 
       const marker = L.marker([lat, lon], { draggable: false }).addTo(map);
