@@ -8,6 +8,7 @@ from urllib.request import urlopen
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "sample_shows.json"
 PROFILES_PATH = Path(__file__).resolve().parents[1] / "data" / "artist_profiles.json"
 ITUNES_CACHE: Dict[str, List[str]] = {}
+BIT_CACHE: Dict[str, List[Dict[str, Any]]] = {}
 
 
 def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -97,6 +98,69 @@ def _seed_tags_for_artist(name: str, explicit_tags: List[str], profiles: Dict[st
     return set(t.lower() for t in _fetch_itunes_tags(name))
 
 
+def _fetch_bandsintown_events(artist: str) -> List[Dict[str, Any]]:
+    key = artist.lower().strip()
+    if key in BIT_CACHE:
+        return BIT_CACHE[key]
+
+    try:
+        url = (
+            "https://rest.bandsintown.com/artists/"
+            f"{quote_plus(artist)}/events?app_id=local-show-finder&date=upcoming"
+        )
+        with urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if isinstance(data, list):
+            BIT_CACHE[key] = data
+            return data
+    except Exception:
+        pass
+
+    BIT_CACHE[key] = []
+    return []
+
+
+def _exact_seed_matches(
+    latitude: float,
+    longitude: float,
+    radius_miles: float,
+    seed_artists: List[str],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for artist in seed_artists:
+        for ev in _fetch_bandsintown_events(artist):
+            venue = ev.get("venue") or {}
+            try:
+                lat2 = float(venue.get("latitude") or 0)
+                lon2 = float(venue.get("longitude") or 0)
+            except Exception:
+                lat2 = 0
+                lon2 = 0
+
+            if lat2 == 0 and lon2 == 0:
+                continue
+
+            dist = _haversine_miles(latitude, longitude, lat2, lon2)
+            if dist > radius_miles:
+                continue
+
+            rows.append(
+                {
+                    "artist": ev.get("artist", {}).get("name") or artist,
+                    "date": (ev.get("datetime") or "")[:10],
+                    "venue": venue.get("name") or "Unknown venue",
+                    "venue_url": venue.get("url") or ev.get("url") or "",
+                    "ticket_url": ev.get("offers", [{}])[0].get("url") or ev.get("url") or "",
+                    "distance_miles": round(dist, 1),
+                    "similar_to": [artist],
+                    "match_score": 1.0,
+                    "reasons": ["Exact artist match", "Bandsintown live event"],
+                }
+            )
+
+    return rows
+
+
 def find_matches(
     latitude: float,
     longitude: float,
@@ -106,6 +170,12 @@ def find_matches(
 ) -> List[Dict[str, Any]]:
     shows = _load_shows()
     profiles = _load_profiles()
+
+    seed_names = [a["name"] for a in favorite_artists if a.get("name")]
+    if anchor_artist:
+        seed_names = [anchor_artist]
+    exact_matches = _exact_seed_matches(latitude, longitude, radius_miles, seed_names)
+
     seed_tags: Dict[str, set[str]] = {
         a["name"]: _seed_tags_for_artist(a["name"], a.get("vibe_tags", []), profiles)
         for a in favorite_artists
@@ -163,5 +233,14 @@ def find_matches(
             }
         )
 
-    out.sort(key=lambda r: r["match_score"], reverse=True)
-    return out
+    merged = exact_matches + out
+
+    deduped: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+    for row in merged:
+        key = (row["artist"].lower(), row["date"], row["venue"].lower())
+        if key not in deduped or row["match_score"] > deduped[key]["match_score"]:
+            deduped[key] = row
+
+    final = list(deduped.values())
+    final.sort(key=lambda r: r["match_score"], reverse=True)
+    return final
