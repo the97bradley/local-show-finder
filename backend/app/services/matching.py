@@ -5,10 +5,12 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote_plus
 from urllib.request import urlopen
 
+from app.services.events import scrape_venue_events
+from app.services.venues import discover_venues
+
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "sample_shows.json"
 PROFILES_PATH = Path(__file__).resolve().parents[1] / "data" / "artist_profiles.json"
 ITUNES_CACHE: Dict[str, List[str]] = {}
-BIT_CACHE: Dict[str, List[Dict[str, Any]]] = {}
 
 
 def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -98,63 +100,24 @@ def _seed_tags_for_artist(name: str, explicit_tags: List[str], profiles: Dict[st
     return set(t.lower() for t in _fetch_itunes_tags(name))
 
 
-def _fetch_bandsintown_events(artist: str) -> List[Dict[str, Any]]:
-    key = artist.lower().strip()
-    if key in BIT_CACHE:
-        return BIT_CACHE[key]
+def _load_live_shows(latitude: float, longitude: float, radius_miles: float) -> List[Dict[str, Any]]:
+    venues = discover_venues(latitude, longitude, radius_miles)
 
-    try:
-        url = (
-            "https://rest.bandsintown.com/artists/"
-            f"{quote_plus(artist)}/events?app_id=local-show-finder&date=upcoming"
-        )
-        with urlopen(url, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        if isinstance(data, list):
-            BIT_CACHE[key] = data
-            return data
-    except Exception:
-        pass
-
-    BIT_CACHE[key] = []
-    return []
-
-
-def _exact_seed_matches(
-    latitude: float,
-    longitude: float,
-    radius_miles: float,
-    seed_artists: List[str],
-) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
-    for artist in seed_artists:
-        for ev in _fetch_bandsintown_events(artist):
-            venue = ev.get("venue") or {}
-            try:
-                lat2 = float(venue.get("latitude") or 0)
-                lon2 = float(venue.get("longitude") or 0)
-            except Exception:
-                lat2 = 0
-                lon2 = 0
-
-            if lat2 == 0 and lon2 == 0:
-                continue
-
-            dist = _haversine_miles(latitude, longitude, lat2, lon2)
-            if dist > radius_miles:
-                continue
-
+    for venue in venues:
+        events = scrape_venue_events(venue, horizon_days=90)
+        for e in events:
             rows.append(
                 {
-                    "artist": ev.get("artist", {}).get("name") or artist,
-                    "date": (ev.get("datetime") or "")[:10],
-                    "venue": venue.get("name") or "Unknown venue",
-                    "venue_url": venue.get("url") or ev.get("url") or "",
-                    "ticket_url": ev.get("offers", [{}])[0].get("url") or ev.get("url") or "",
-                    "distance_miles": round(dist, 1),
-                    "similar_to": [artist],
-                    "match_score": 1.0,
-                    "reasons": ["Exact artist match", "Bandsintown live event"],
+                    "artist": e.artist,
+                    "date": e.date,
+                    "venue": e.venue,
+                    "venue_url": e.venue_url,
+                    "ticket_url": e.ticket_url,
+                    "latitude": e.latitude,
+                    "longitude": e.longitude,
+                    "vibe_tags": e.vibe_tags,
+                    "scene": e.scene,
                 }
             )
 
@@ -168,13 +131,11 @@ def find_matches(
     favorite_artists: List[Dict[str, Any]],
     anchor_artist: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    shows = _load_shows()
-    profiles = _load_profiles()
+    shows = _load_live_shows(latitude, longitude, radius_miles)
+    if not shows:
+        shows = _load_shows()  # fallback for local dev when scraping yields nothing
 
-    seed_names = [a["name"] for a in favorite_artists if a.get("name")]
-    if anchor_artist:
-        seed_names = [anchor_artist]
-    exact_matches = _exact_seed_matches(latitude, longitude, radius_miles, seed_names)
+    profiles = _load_profiles()
 
     seed_tags: Dict[str, set[str]] = {
         a["name"]: _seed_tags_for_artist(a["name"], a.get("vibe_tags", []), profiles)
@@ -208,14 +169,26 @@ def find_matches(
             elif overlap == best_overlap and overlap > 0:
                 similar_to.append(seed_name)
 
+        artist_lc = str(s.get("artist", "")).lower()
+        exact_seed_name = next((seed for seed in seed_tags.keys() if seed.lower() in artist_lc), None)
+        if exact_seed_name:
+            similar_to = [exact_seed_name]
+            best_overlap = max(best_overlap, 6)
+
         score = min(1.0, (best_overlap / 6.0) + max(0, (radius_miles - dist) / max(radius_miles, 1)) * 0.2)
+        if exact_seed_name:
+            score = 1.0
+
         if best_overlap == 0 and has_any_seed_tags:
             continue
 
         reasons = [
             f"Tag overlap: {best_overlap}",
             f"Scene: {s.get('scene', 'unknown')}",
+            f"Source venue: {s.get('venue', 'unknown')}",
         ]
+        if exact_seed_name:
+            reasons.insert(0, "Exact artist name match in scraped venue calendar")
         if not has_any_seed_tags:
             reasons.append("Fallback mode: no known tags for seed artists yet")
 
@@ -233,10 +206,8 @@ def find_matches(
             }
         )
 
-    merged = exact_matches + out
-
     deduped: Dict[tuple[str, str, str], Dict[str, Any]] = {}
-    for row in merged:
+    for row in out:
         key = (row["artist"].lower(), row["date"], row["venue"].lower())
         if key not in deduped or row["match_score"] > deduped[key]["match_score"]:
             deduped[key] = row

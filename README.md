@@ -7,8 +7,9 @@ Vibe-first local show discovery app.
 - **Python FastAPI backend** (`backend/`)
   - `POST /api/v1/shows/recommend`
   - Filters shows by radius from a location
-  - Pulls exact seed-artist upcoming events from Bandsintown (when available)
-  - Matches local shows to your seed artists using vibe-tag overlap + distance
+  - Discovers local venues by geospatial radius (OpenStreetMap/Overpass)
+  - Scrapes venue calendars within a 90-day horizon
+  - Matches scraped local shows to your seed artists using vibe-tag overlap + distance
 - **JS frontend (Next.js)** (`frontend/`)
   - Enter city + coordinates + radius
   - Paste seed artists (tags optional)
