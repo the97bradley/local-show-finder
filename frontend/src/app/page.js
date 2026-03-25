@@ -12,7 +12,7 @@ export default function Home() {
   const [radius, setRadius] = useState("20");
   const [anchorArtist, setAnchorArtist] = useState("");
   const [artistsText, setArtistsText] = useState(
-    "Tame Impala|indie electronic,dream pop,psych\nMJ Lenderman|alt-country,americana,indie rock",
+    "Tame Impala\nMJ Lenderman\nKhruangbin",
   );
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -101,7 +101,7 @@ export default function Home() {
 
         <div style={{ marginTop: 10 }}>
           <label className="label">
-            Favorite artists (one per line: <code>Artist|tag1,tag2</code>)
+            Favorite artists (one per line, tags optional: <code>Artist</code> or <code>Artist|tag1,tag2</code>)
             <textarea
               className="textarea"
               rows={8}

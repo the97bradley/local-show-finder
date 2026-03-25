@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "sample_shows.json"
+PROFILES_PATH = Path(__file__).resolve().parents[1] / "data" / "artist_profiles.json"
 
 
 def _haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -24,6 +25,17 @@ def _load_shows() -> List[Dict[str, Any]]:
         return json.load(f)
 
 
+def _load_profiles() -> Dict[str, List[str]]:
+    with open(PROFILES_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _seed_tags_for_artist(name: str, explicit_tags: List[str], profiles: Dict[str, List[str]]) -> set[str]:
+    if explicit_tags:
+        return set(t.lower() for t in explicit_tags)
+    return set(t.lower() for t in profiles.get(name.lower(), []))
+
+
 def find_matches(
     latitude: float,
     longitude: float,
@@ -32,13 +44,21 @@ def find_matches(
     anchor_artist: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     shows = _load_shows()
+    profiles = _load_profiles()
     seed_tags: Dict[str, set[str]] = {
-        a["name"]: set(t.lower() for t in a.get("vibe_tags", []))
+        a["name"]: _seed_tags_for_artist(a["name"], a.get("vibe_tags", []), profiles)
         for a in favorite_artists
     }
 
-    if anchor_artist and anchor_artist in seed_tags:
-        seed_tags = {anchor_artist: seed_tags[anchor_artist]}
+    if anchor_artist:
+        if anchor_artist in seed_tags:
+            seed_tags = {anchor_artist: seed_tags[anchor_artist]}
+        else:
+            seed_tags = {
+                anchor_artist: set(t.lower() for t in profiles.get(anchor_artist.lower(), []))
+            }
+
+    has_any_seed_tags = any(len(tags) > 0 for tags in seed_tags.values())
 
     out = []
     for s in shows:
@@ -58,8 +78,15 @@ def find_matches(
                 similar_to.append(seed_name)
 
         score = min(1.0, (best_overlap / 6.0) + max(0, (radius_miles - dist) / max(radius_miles, 1)) * 0.2)
-        if best_overlap == 0 and seed_tags:
+        if best_overlap == 0 and has_any_seed_tags:
             continue
+
+        reasons = [
+            f"Tag overlap: {best_overlap}",
+            f"Scene: {s.get('scene', 'unknown')}",
+        ]
+        if not has_any_seed_tags:
+            reasons.append("Fallback mode: no known tags for seed artists yet")
 
         out.append(
             {
@@ -71,10 +98,7 @@ def find_matches(
                 "distance_miles": round(dist, 1),
                 "similar_to": similar_to,
                 "match_score": round(score, 3),
-                "reasons": [
-                    f"Tag overlap: {best_overlap}",
-                    f"Scene: {s.get('scene', 'unknown')}",
-                ],
+                "reasons": reasons,
             }
         )
 

@@ -10,7 +10,7 @@ Vibe-first local show discovery app.
   - Matches local shows to your seed artists using vibe-tag overlap + distance
 - **JS frontend (Next.js)** (`frontend/`)
   - Enter city + coordinates + radius
-  - Paste seed artists and vibe tags
+  - Paste seed artists (tags optional)
   - Optional anchor artist mode
   - See matched shows with “similar to” explanations
 
