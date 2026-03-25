@@ -6,12 +6,12 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
 
 export default function Home() {
-  const [city, setCity] = useState("Denver");
+  const [city] = useState("Local");
   const [address, setAddress] = useState("Denver, CO");
   const [addressOptions, setAddressOptions] = useState([]);
   const [latitude, setLatitude] = useState("39.7392");
   const [longitude, setLongitude] = useState("-104.9903");
-  const [radius, setRadius] = useState("20");
+  const [radius, setRadius] = useState("8");
   const [anchorArtist, setAnchorArtist] = useState("");
   const [artistsText, setArtistsText] = useState(
     "Tame Impala\nMJ Lenderman\nKhruangbin",
@@ -90,11 +90,13 @@ export default function Home() {
       const marker = L.marker([lat, lon], { draggable: false }).addTo(map);
       const circle = L.circle([lat, lon], {
         radius: radMeters,
-        color: "#6d7cff",
-        fillColor: "#6d7cff",
-        fillOpacity: 0.18,
-        weight: 2,
+        color: "#35d6c5",
+        fillColor: "#35d6c5",
+        fillOpacity: 0.14,
+        weight: 3,
+        dashArray: "8 6",
       }).addTo(map);
+      circle.bringToFront();
 
       map.on("dragend", () => {
         const center = map.getCenter();
@@ -171,15 +173,7 @@ export default function Home() {
       </header>
 
       <section className="panel">
-        <div className="grid">
-          <label className="label">
-            City
-            <input
-              className="input"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-            />
-          </label>
+        <div className="grid singleCol">
           <label className="label" style={{ position: "relative" }}>
             Address
             <input
