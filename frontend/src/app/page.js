@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
 
 export default function Home() {
   const [city, setCity] = useState("Denver");
@@ -11,7 +12,7 @@ export default function Home() {
   const [radius, setRadius] = useState("20");
   const [anchorArtist, setAnchorArtist] = useState("");
   const [artistsText, setArtistsText] = useState(
-    "Tame Impala|indie electronic,dream pop,psych\nMJ Lenderman|alt-country,americana,indie rock"
+    "Tame Impala|indie electronic,dream pop,psych\nMJ Lenderman|alt-country,americana,indie rock",
   );
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -57,39 +58,92 @@ export default function Home() {
   }
 
   return (
-    <main>
-      <h1>Local Show Finder</h1>
-      <p>Vibe-first local show discovery from your favorite artists.</p>
+    <main className="container">
+      <header className="header">
+        <h1 className="title">Local Show Finder</h1>
+        <p className="subtitle">
+          Find upcoming local shows that match your taste by <strong>vibe</strong>,
+          not just popularity.
+        </p>
+      </header>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxWidth: 900 }}>
-        <label>City<input value={city} onChange={(e) => setCity(e.target.value)} /></label>
-        <label>Radius (miles)<input value={radius} onChange={(e) => setRadius(e.target.value)} /></label>
-        <label>Latitude<input value={latitude} onChange={(e) => setLatitude(e.target.value)} /></label>
-        <label>Longitude<input value={longitude} onChange={(e) => setLongitude(e.target.value)} /></label>
-      </div>
+      <section className="panel">
+        <div className="grid">
+          <label className="label">
+            City
+            <input className="input" value={city} onChange={(e) => setCity(e.target.value)} />
+          </label>
+          <label className="label">
+            Radius (miles)
+            <input className="input" value={radius} onChange={(e) => setRadius(e.target.value)} />
+          </label>
+          <label className="label">
+            Latitude
+            <input className="input" value={latitude} onChange={(e) => setLatitude(e.target.value)} />
+          </label>
+          <label className="label">
+            Longitude
+            <input className="input" value={longitude} onChange={(e) => setLongitude(e.target.value)} />
+          </label>
+        </div>
 
-      <div style={{ marginTop: 12 }}>
-        <label>Optional anchor artist<input value={anchorArtist} onChange={(e) => setAnchorArtist(e.target.value)} /></label>
-      </div>
+        <div style={{ marginTop: 10 }}>
+          <label className="label">
+            Optional anchor artist
+            <input
+              className="input"
+              value={anchorArtist}
+              onChange={(e) => setAnchorArtist(e.target.value)}
+              placeholder="e.g. Tame Impala"
+            />
+          </label>
+        </div>
 
-      <div style={{ marginTop: 12 }}>
-        <label>Favorite artists (one per line: <code>Artist|tag1,tag2</code>)</label>
-        <textarea rows={8} style={{ width: "100%" }} value={artistsText} onChange={(e) => setArtistsText(e.target.value)} />
-      </div>
+        <div style={{ marginTop: 10 }}>
+          <label className="label">
+            Favorite artists (one per line: <code>Artist|tag1,tag2</code>)
+            <textarea
+              className="textarea"
+              rows={8}
+              value={artistsText}
+              onChange={(e) => setArtistsText(e.target.value)}
+            />
+          </label>
+        </div>
 
-      <button onClick={runSearch} disabled={loading}>{loading ? "Searching..." : "Find Shows"}</button>
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="btn" onClick={runSearch} disabled={loading}>
+            {loading ? "Finding vibe matches..." : "Find Shows"}
+          </button>
+          <span className="meta">API: {API_BASE}</span>
+        </div>
+      </section>
 
-      <hr />
-      <h2>Matches</h2>
-      {results.length === 0 && <p>No matches yet.</p>}
+      <h2 className="section-title">Matches</h2>
+      {results.length === 0 && <p className="meta">No matches yet.</p>}
+
       {results.map((r) => (
-        <article key={`${r.artist}-${r.date}`} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginBottom: 10 }}>
+        <article key={`${r.artist}-${r.date}`} className="card">
           <h3>{r.artist}</h3>
-          <p>{r.date} • {r.venue} • {r.distance_miles} mi</p>
-          <p>Similar to: <strong>{r.similar_to.join(", ") || "-"}</strong></p>
-          <p>Score: {r.match_score}</p>
-          <p>Why: {r.reasons.join(" • ")}</p>
-          <p><a href={r.ticket_url} target="_blank">Tickets</a> • <a href={r.venue_url} target="_blank">Venue</a></p>
+          <p className="meta">
+            {r.date} • {r.venue} • {r.distance_miles} mi
+          </p>
+          <p>
+            Similar to: <strong>{r.similar_to.join(", ") || "-"}</strong>
+          </p>
+          <span className="score">Match score {r.match_score}</span>
+          <p className="meta" style={{ marginTop: 8 }}>
+            Why: {r.reasons.join(" • ")}
+          </p>
+          <p className="links">
+            <a href={r.ticket_url} target="_blank">
+              Tickets
+            </a>{" "}
+            •{" "}
+            <a href={r.venue_url} target="_blank">
+              Venue
+            </a>
+          </p>
         </article>
       ))}
     </main>
